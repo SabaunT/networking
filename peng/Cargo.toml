@@ -1,0 +1,22 @@
+[package]
+name = "peng"
+version = "0.1.0"
+authors = ["Sabaun Taraki <taraki.sabaun.rl@gmail.com>"]
+edition = "2018"
+description = "Dumb/simple ping"
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+rand = "0.7.3"
+
+[[bin]]
+name = "server"
+path = "src/server.rs"
+
+[[bin]]
+name = "client"
+path = "src/client.rs"
+
+[lib]
+name = "peng"
+path = "src/lib.rs"
