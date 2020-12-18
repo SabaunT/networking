@@ -1,15 +1,15 @@
 use std::io::ErrorKind;
 use std::time::{Duration, Instant};
 
-use peng;
+use pinger;
 
 fn main() {
-    peng::run(send_peng)
+    pinger::run(ping)
 }
 
-fn send_peng() -> Result<(), peng::AnyError> {
-    let udp_sock = peng::new_udp_sock(peng::CLIENT_ADDR, Some(Duration::from_secs(1)))?;
-    udp_sock.connect(peng::SERVER_ADDR)?;
+fn ping() -> Result<(), pinger::AnyError> {
+    let udp_sock = pinger::new_udp_sock(pinger::CLIENT_ADDR, Some(Duration::from_secs(1)))?;
+    udp_sock.connect(pinger::SERVER_ADDR)?;
 
     for num in 0u64..=10 {
         // send
@@ -17,7 +17,7 @@ fn send_peng() -> Result<(), peng::AnyError> {
         udp_sock.send(&num.to_be_bytes())?;
 
         // measure recv dur
-        let mut buf = peng::PengBuf::default();
+        let mut buf = pinger::PingBuf::default();
         match udp_sock.recv(&mut buf) {
             Ok(_) => {
                 let recv_dur = Instant::now().duration_since(sent_at);

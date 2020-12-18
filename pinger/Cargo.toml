@@ -1,5 +1,5 @@
 [package]
-name = "peng"
+name = "pinger"
 version = "0.1.0"
 authors = ["Sabaun Taraki <taraki.sabaun.rl@gmail.com>"]
 edition = "2018"
@@ -18,5 +18,5 @@ name = "client"
 path = "src/client.rs"
 
 [lib]
-name = "peng"
+name = "pinger"
 path = "src/lib.rs"

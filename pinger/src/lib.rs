@@ -4,7 +4,7 @@ use std::net::{ToSocketAddrs, UdpSocket};
 use std::time::Duration;
 
 pub type AnyError = Box<dyn std::error::Error>;
-pub type PengBuf = [u8; 8];
+pub type PingBuf = [u8; 8];
 
 pub const SERVER_ADDR: &str = "127.0.0.1:8000";
 pub const CLIENT_ADDR: &str = "127.0.0.1:8001";
@@ -26,10 +26,10 @@ pub fn new_udp_sock<T: ToSocketAddrs>(addr: T, read_timeout: Option<Duration>) -
     Ok(sock)
 }
 
-pub fn buf_to_data(buf: PengBuf) -> impl std::fmt::Display {
+pub fn buf_to_data(buf: PingBuf) -> impl std::fmt::Display {
     to_u64(buf)
 }
 
-fn to_u64(buf: PengBuf) -> u64 {
+fn to_u64(buf: PingBuf) -> u64 {
     u64::from_be_bytes(buf)
 }
