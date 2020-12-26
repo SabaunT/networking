@@ -3,6 +3,7 @@
 use std::net::{ToSocketAddrs, UdpSocket};
 use std::time::Duration;
 
+// TODO use anyhow!
 pub type AnyError = Box<dyn std::error::Error>;
 pub type PingBuf = [u8; 8];
 
