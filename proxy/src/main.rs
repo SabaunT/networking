@@ -75,13 +75,14 @@ fn handle_connection(mut stream: TcpStream, cache: Cache) -> Result<(), Error> {
         if let Some(data) = c.get(&target_resource) {
             stream.write(data)?;
         } else {
-            // TODO perform request to target resource and send received response to `stream`
+            // TODO perform request to target resource, read in loop response bytes and send them to `stream`
             // let mut s = TcpStream::connect("www.google.com:80").unwrap();
-            // let req = b"GET / HTTP/1.1\r\nHost: www.google.com\r\nUser-Agent: curl/7.58.0\r\nAccept: */*\r\n\r\n";
+            // let req = b"GET / HTTP/1.1\r\nHost: www.google.com\r\nUser-Agent: Chrome/51.0.2704.103\r\nAccept: */*\r\nConnection: keep-alive\r\n\r\n";
             // s.write(req).unwrap();
-            // let mut read_buf = [0; 4096];
-            // let _ = s.read(&mut read_buf).unwrap();
-            // stream.write(&read_buf)?;
+            // let mut read_buf = [0; 32000];
+            // let i = s.read(&mut read_buf).unwrap();
+            // println!("{:?}", String::from_utf8_lossy(&read_buf[..i]));
+            // stream.write(&read_buf[..i])?;
         }
     }
     Ok(())
