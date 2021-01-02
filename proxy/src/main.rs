@@ -1,7 +1,6 @@
 //! A simple proxy server.
 //!
 //! todo Explain how it works
-//! https://github.com/wlabatey/computer_networking_a_top_down_approach/blob/master/assignments/05_http_proxy/http_proxy.py as an example
 
 #[macro_use]
 extern crate anyhow;
@@ -36,29 +35,6 @@ fn run() -> Result<(), Error> {
     for stream in tcp_server_socket.incoming() {
         let stream = stream?;
         handle_connection(stream, cache.clone())?;
-    //     let read = {
-    //         let s = stream.read(&mut buf[..]).unwrap();
-    //
-    //         let mut headers = [EMPTY_HEADER; 64];
-    //         let mut req = Request::new(&mut headers);
-    //         let _ = req.parse(&buf).unwrap();
-    //
-    //
-    //         let mut cache_l = cache.lock().unwrap();
-    //         if let Some(val) = cache_l.get(req.path.unwrap()) {
-    //             let _ = stream.write(&mut val.clone()).unwrap();
-    //         } else {
-    //             let url = &req.path.unwrap().trim_start_matches("/www.");
-    //             let url = format!("{}:80", url);
-    //             println!("{:?}", url);
-    //             let mut ss = TcpStream::connect(url).unwrap();
-    //             ss.write(&buf[..s]).unwrap();
-    //             let mut read_buf = [0; 4096];
-    //             let _ = ss.read(&mut read_buf).unwrap();
-    //             cache_l.insert(req.path.unwrap().to_string(), read_buf.to_vec());
-    //             let _ = stream.write(&mut read_buf).unwrap();
-    //         }
-    //     };
     }
     Ok(())
 }
@@ -70,19 +46,36 @@ fn handle_connection(mut stream: TcpStream, cache: Cache) -> Result<(), Error> {
 
     let req = Request::parse(&buf, &mut headers)?;
     {
-        let c = cache.lock().expect("todo msg");
+        let mut c = cache.lock().expect("todo msg");
         let target_resource = req.resource()?;
         if let Some(data) = c.get(&target_resource) {
             stream.write(data)?;
+            stream.flush()?;
         } else {
-            // TODO perform request to target resource, read in loop response bytes and send them to `stream`
-            // let mut s = TcpStream::connect("www.google.com:80").unwrap();
-            // let req = b"GET / HTTP/1.1\r\nHost: www.google.com\r\nUser-Agent: Chrome/51.0.2704.103\r\nAccept: */*\r\nConnection: keep-alive\r\n\r\n";
-            // s.write(req).unwrap();
-            // let mut read_buf = [0; 32000];
-            // let i = s.read(&mut read_buf).unwrap();
-            // println!("{:?}", String::from_utf8_lossy(&read_buf[..i]));
-            // stream.write(&read_buf[..i])?;
+            let authority = req.authority()?;
+            let mut s = TcpStream::connect(&authority).unwrap();
+            // https://tools.ietf.org/html/rfc2616#section-8.1.2
+            // todo method
+            let req = format!(
+                "GET / HTTP/1.1\r\nHost: {}\r\nUser-Agent: MyProxy/7.58.0\r\nAccept: */*\r\nConnection: close\r\n\r\n",
+                authority
+            );
+            s.write(req.as_bytes())?;
+            s.flush()?;
+            let mut caching_buf = Vec::new();
+            loop {
+                let mut buf = [0; 512];
+                match s.read(&mut buf) {
+                    Ok(0) => break,
+                    Ok(i) => {
+                        caching_buf.extend_from_slice(&buf[..i]);
+                        stream.write(&buf[..i])?;
+                    },
+                    Err(e) => return Err(anyhow!(e))
+                }
+            }
+            stream.flush()?;
+            c.insert(target_resource, caching_buf);
         }
     }
     Ok(())
