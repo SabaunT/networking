@@ -5,6 +5,7 @@
 #[macro_use]
 extern crate anyhow;
 
+use std::convert::TryFrom;
 use std::net::{TcpListener, TcpStream};
 use std::io::{Read, Write};
 use std::sync::{Mutex, Arc};
@@ -12,12 +13,10 @@ use std::collections::HashMap;
 
 use anyhow::Error;
 
-use http_utils::Request;
 use cache::Cache;
 
-// Resource size implementing io::{Read, Write}
-const BUF_SIZE: usize = 4096;
-const HEADERS_COUNT: usize = 64;
+// Client request to proxy server meta - data
+const REQ_SIZE: usize = 4096;
 
 fn main() {
     loop {
@@ -40,19 +39,19 @@ fn run() -> Result<(), Error> {
 }
 
 fn handle_connection(mut stream: TcpStream, cache: Cache) -> Result<(), Error> {
-    let mut buf = [0; BUF_SIZE];
-    let mut headers = [httparse::EMPTY_HEADER; HEADERS_COUNT]; // TODO abstraction leak
+    let mut buf = [0; REQ_SIZE];
     let _ = stream.read(&mut buf[..])?;
 
-    let req = Request::parse(&buf, &mut headers)?;
+    let req = http::Request::try_from(&buf)?;
     {
         let mut c = cache.lock().expect("todo msg");
-        let target_resource = req.resource()?;
-        if let Some(data) = c.get(&target_resource) {
-            stream.write(data)?;
-            stream.flush()?;
+        let target_url = req.target_url().ok_or(anyhow!("Invalid request: invalid target url"))?;
+        let mut ret_bytes = None;
+
+        if let Some(data) = c.get(&target_url) {
+            ret_bytes = Some(data);
         } else {
-            let authority = req.authority()?;
+            let authority = req.target_url()?;
             let mut s = TcpStream::connect(&authority).unwrap();
             // https://tools.ietf.org/html/rfc2616#section-8.1.2
             // todo method
@@ -77,65 +76,69 @@ fn handle_connection(mut stream: TcpStream, cache: Cache) -> Result<(), Error> {
             stream.flush()?;
             c.insert(target_resource, caching_buf);
         }
+
+        // stream.write() and stream.flush()
     }
     Ok(())
 }
 
-// todo make it more generic
-mod http_utils {
+mod http {
     use std::net::TcpStream;
+    use std::convert::TryFrom;
 
+    use anyhow::Error;
     use url::Url;
     use httparse;
-    use anyhow::Error;
 
-    use crate::HEADERS_COUNT;
-    use std::io::{Write, Read};
+    pub(super) struct RequestBuilder(Request);
 
-    pub(super) struct Request<'h, 'b>(httparse::Request<'h, 'b>);
+    pub(super) struct Request {
+        pub(super) method: Option<String>,
+        pub(super) host: Option<String>,
+        pub(super) path: Option<String>,
+        pub(super) port: Option<u16>,
+        // headers
+    }
 
-    impl<'h, 'b> Request<'h, 'b> {
-        pub(super) fn parse(data: &'b [u8], headers: &'h mut [httparse::Header<'b>; HEADERS_COUNT]) -> Result<Request<'h, 'b>, Error> {
-            let mut r = httparse::Request::new(headers);
-            let _ = r.parse(data)?;
-
-            Ok(Request(r))
-        }
-
-        pub(super) fn authority(&self) -> Result<String, Error> {
-            let Request(ref req) = self;
-            if let Some(path) = req.path {
-                let path = path.trim_start_matches("/"); // TODO abstraction leak
-                let url = Url::parse(path)?;
-                let ret = Self::authority_from_url(url)?;
-                return Ok(ret);
+    impl Request {
+        pub(super) fn target_url(&self) -> Option<String> {
+            if let (Some(h), Some(port), Some(path)) = (&self.host, self.port, &self.path) {
+                let ret = format!("{}:{}{}", h, port, path);
+                return Some(ret)
             }
-            Err(anyhow!("Invalid request: has not target resource"))
+            None
         }
+    }
 
-        pub(super) fn resource(&self) -> Result<String, Error> {
-            let Request(ref req) = self;
-            if let Some(path) = req.path {
-                let path = path.trim_start_matches("/"); // TODO abstraction leak
-                let url = Url::parse(path)?;
-                let ret = Self::resource_from_url(url)?;
-                return Ok(ret);
-            }
-            Err(anyhow!("Invalid request: has not target resource"))
-        }
+    // todo clean-up
+    impl TryFrom<&[u8]> for Request {
+        type Error = Error;
 
-        fn resource_from_url(url: Url) -> Result<String, Error> {
-            if let (Some(host), Some(port), path) = (url.host_str(), url.port_or_known_default(), url.path()) {
-                return Ok(format!("{}:{}{}", host, port, path));
-            }
-            Err(anyhow!("Invalid request: invalid target url"))
-        }
-
-        fn authority_from_url(url: Url) -> Result<String, Error> {
-            if let (Some(host), Some(port)) = (url.host_str(), url.port_or_known_default()) {
-                return Ok(format!("{}:{}", host, port));
-            }
-            Err(anyhow!("Invalid request: invalid target authority"))
+        fn try_from(data: &[u8]) -> Result<Self, Self::Error> {
+            // todo hide it in some mode under HttpParser trait
+            let r = {
+                let mut headers = [httparse::EMPTY_HEADER; 64];
+                let mut r = httparse::Request::new(&headers);
+                r.parse(data)?;
+                r
+            };
+            let method = r.method.map(ToString::to_string);
+            let (host, path, port) = {
+                r.path.map(|p| {
+                    let p = p.trim_start_matches("/");
+                    let url = Url::parse(p)?;
+                    let host = url.host_str().map(ToString::to_string);
+                    let path = Some(url.path().to_string());
+                    let port = url.port_or_known_default();
+                    (host, path, port)
+                }).ok_or(anyhow!("Invalid request: request has not requesting resource"))?
+            };
+            Ok(Request {
+                method,
+                host,
+                path,
+                port
+            })
         }
     }
 }
