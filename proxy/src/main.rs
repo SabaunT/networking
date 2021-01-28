@@ -1,6 +1,11 @@
-//! A simple proxy server.
+//! A simple proxy server in accordance to explanation in "Computer networking. A Top-down approach" (Kurose & Ross).
 //!
-//! todo Explain how it works
+//! Proxy server stands in the middle of a client and original server interaction.
+//! It improves the interaction by lowering response time:
+//! 1. client performs sends http-request, trying to get some object
+//! 2. request is handled by proxy server which checks whether requested object is in proxy's cache.
+//! 3.1. If it's in the cache, then proxy server returns the object. So, there is no need to connect to a remote server.
+//! 3.2. If it isn't in the cache, the proxy server tries to get an object from the original server resending clients request.
 
 #[macro_use]
 extern crate anyhow;
@@ -36,7 +41,7 @@ fn run() -> Result<(), Error> {
 }
 
 fn handle_connection(mut stream: TcpStream, cache: Cache) -> Result<(), Error> {
-    let mut proxy_server = ProxyServer::from_stream(stream);
+    let mut proxy_server = ProxyServer::from(stream);
     let req = proxy_server.read_req()?;
 
     {
@@ -82,7 +87,7 @@ mod http {
     }
 
     impl ProxyServer {
-        pub(super) fn from_stream(stream: TcpStream) -> Self {
+        pub(super) fn from(stream: TcpStream) -> Self {
             Self(stream)
         }
 
@@ -157,12 +162,10 @@ mod http {
         }
     }
 
-    // todo clean-up
     impl TryFrom<&[u8]> for Request {
         type Error = Error;
 
         fn try_from(data: &[u8]) -> Result<Self, Self::Error> {
-            // todo hide it in some mode under HttpParser trait
             let mut headers = [httparse::EMPTY_HEADER; 64];
             let mut r = httparse::Request::new(&mut headers);
             r.parse(data)?;
