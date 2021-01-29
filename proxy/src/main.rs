@@ -10,15 +10,14 @@
 #[macro_use]
 extern crate anyhow;
 
-use std::collections::HashMap;
-use std::convert::TryFrom;
-use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
+use std::sync::mpsc::{channel, Sender};
+use std::thread;
 
 use anyhow::Error;
 
 use cache::Cache;
-use http::{ProxyServer, ProxyClient};
+use http::{ProxyClient, ProxyServer};
 
 fn main() {
     loop {
@@ -29,18 +28,40 @@ fn main() {
 }
 
 fn run() -> Result<(), Error> {
-    let mut cache = Cache::default();
+    let (sender, receiver) = channel();
+    let cache = Cache::default();
     let proxy_server_socket = TcpListener::bind("127.0.0.1:8080")?;
 
-    for stream in proxy_server_socket.incoming() {
-        // todo multithread
-        let stream = stream?;
-        handle_connection(stream, cache.clone())?;
+    {
+        let s = sender.clone();
+        thread::spawn(move || {
+            for stream in proxy_server_socket.incoming() {
+                match stream {
+                    Ok(stream) => {
+                        let c = cache.clone();
+                        let s = sender.clone();
+                        thread::spawn(|| handle_connection(stream, c, s));
+                    }
+                    Err(e) => s.send(Err(e.into())).expect("internal error: receiver end has hung up"),
+                };
+            }
+        });
     }
+
+    // Handling errors from threads
+    for res in receiver {
+        let _ = res?;
+    }
+
     Ok(())
 }
 
-fn handle_connection(mut stream: TcpStream, cache: Cache) -> Result<(), Error> {
+fn handle_connection(stream: TcpStream, cache: Cache, sender: Sender<Result<(), Error>>) {
+    let res = handle_connection_impl(stream, cache.clone());
+    let _ = sender.send(res).expect("internal error: receiver end has hung up");
+}
+
+fn handle_connection_impl(stream: TcpStream, cache: Cache) -> Result<(), Error> {
     let mut proxy_server = ProxyServer::from(stream);
     let req = proxy_server.read_req()?;
 
@@ -66,8 +87,7 @@ fn handle_connection(mut stream: TcpStream, cache: Cache) -> Result<(), Error> {
 mod http {
     use std::convert::TryFrom;
     use std::io::{Read, Write};
-    use std::net::{TcpListener, TcpStream, ToSocketAddrs};
-    use std::ops::Deref;
+    use std::net::{TcpStream, ToSocketAddrs};
 
     use anyhow::Error;
     use httparse;
@@ -105,7 +125,9 @@ mod http {
                 match stream.read(&mut buf) {
                     Ok(i) => {
                         req_bytes.extend_from_slice(&buf[..i]);
-                        if buf[..i].ends_with(REQ_END) { break; }
+                        if buf[..i].ends_with(REQ_END) {
+                            break;
+                        }
                     }
                     Err(e) => return Err(anyhow!(e)),
                 }
@@ -143,7 +165,6 @@ mod http {
     }
 
     impl Request {
-
         pub(super) fn target_url(&self) -> String {
             format!("{}:{}{}", self.host, self.port, self.path)
         }
