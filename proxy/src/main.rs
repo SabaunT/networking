@@ -4,8 +4,10 @@
 //! It improves the interaction by lowering response time:
 //! 1. client performs sends http-request, trying to get some object
 //! 2. request is handled by proxy server which checks whether requested object is in proxy's cache.
-//! 3.1. If it's in the cache, then proxy server returns the object. So, there is no need to connect to a remote server.
-//! 3.2. If it isn't in the cache, the proxy server tries to get an object from the original server resending clients request.
+//! 3.1. If it's in the cache, then proxy server returns the object if it's valid against TTL. So, there is no need to connect to a remote server and
+//! cache invalidation happens by demand.
+//! 3.2. If it isn't in the cache or object isn't valid against TTL, the proxy server tries to get an object from the original server resending clients request.
+//! The response from the original server is returned to the client.
 
 #[macro_use]
 extern crate anyhow;
