@@ -8,6 +8,7 @@ description = "Dumb/simple ping"
 
 [dependencies]
 rand = "0.7.3"
+anyhow = "1.0.36"
 
 [[bin]]
 name = "server"

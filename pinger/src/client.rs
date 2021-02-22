@@ -1,13 +1,15 @@
 use std::io::ErrorKind;
 use std::time::{Duration, Instant};
 
+use anyhow::Error;
+
 use pinger;
 
 fn main() {
     pinger::run(ping)
 }
 
-fn ping() -> Result<(), pinger::AnyError> {
+fn ping() -> Result<(), Error> {
     let udp_sock = pinger::new_udp_sock(pinger::CLIENT_ADDR, Some(Duration::from_secs(1)))?;
     udp_sock.connect(pinger::SERVER_ADDR)?;
 
@@ -24,7 +26,7 @@ fn ping() -> Result<(), pinger::AnyError> {
                 println!("Request number {} received after {:?}", num, recv_dur);
             }
             Err(e) if e.kind() == ErrorKind::WouldBlock => println!("Request number {} timed out", num),
-            Err(e) => return Err(Box::from(e)),
+            Err(e) => return Err(e.into()),
         };
     }
     Ok(())

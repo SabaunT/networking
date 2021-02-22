@@ -3,14 +3,14 @@
 use std::net::{ToSocketAddrs, UdpSocket};
 use std::time::Duration;
 
-// TODO use anyhow!
-pub type AnyError = Box<dyn std::error::Error>;
+use anyhow::Error;
+
 pub type PingBuf = [u8; 8];
 
 pub const SERVER_ADDR: &str = "127.0.0.1:8000";
 pub const CLIENT_ADDR: &str = "127.0.0.1:8001";
 
-pub fn run<F: FnOnce() -> Result<(), AnyError>>(f: F) {
+pub fn run<F: FnOnce() -> Result<(), Error>>(f: F) {
     std::process::exit(match f() {
         Ok(_) => 0,
         Err(e) => {
@@ -20,7 +20,7 @@ pub fn run<F: FnOnce() -> Result<(), AnyError>>(f: F) {
     });
 }
 
-pub fn new_udp_sock<T: ToSocketAddrs>(addr: T, read_timeout: Option<Duration>) -> Result<UdpSocket, AnyError> {
+pub fn new_udp_sock<T: ToSocketAddrs>(addr: T, read_timeout: Option<Duration>) -> Result<UdpSocket, Error> {
     let sock = UdpSocket::bind(addr).expect("port is used");
     sock.set_read_timeout(read_timeout)?;
 

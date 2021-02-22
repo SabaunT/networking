@@ -1,12 +1,14 @@
 use rand::Rng;
 
+use anyhow::Error;
+
 use pinger;
 
 fn main() {
     pinger::run(serve_ping)
 }
 
-fn serve_ping() -> Result<(), pinger::AnyError> {
+fn serve_ping() -> Result<(), Error> {
     let udp_sock = pinger::new_udp_sock(pinger::SERVER_ADDR, None)?;
 
     println!("Ready for UDP packets");
@@ -26,6 +28,7 @@ fn serve_ping() -> Result<(), pinger::AnyError> {
         udp_sock.send_to(&incrementor.to_be_bytes(), addr)?;
         incrementor += 1;
         if incrementor == 30 {
+            println!("Finishing up!");
             break;
         }
     }
